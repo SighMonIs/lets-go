@@ -2,7 +2,7 @@ const CONDITIONS = ['unknown', 'sealed', 'complete', 'incomplete', 'parts_only']
 
 export default function SetCard({ set, onUpdate, onDelete }) {
   const handleCondition = (e) => onUpdate(set.id, { condition: e.target.value })
-  const handleQty = (delta) => onUpdate(set.id, { quantity: Math.max(1, (set.quantity || 1) + delta })
+  const handleQty = (delta) => onUpdate(set.id, { quantity: Math.max(1, (set.quantity || 1) + delta) })
 
   return (
     <div style={styles.card}>
