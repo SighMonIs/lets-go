@@ -1,4 +1,4 @@
-name: Build & Push Images
+name: Build & Push Image
 
 on:
   push:
@@ -24,16 +24,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push backend
+      - name: Build & push
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: .
           push: true
-          tags: ghcr.io/${{ env.OWNER }}/lets-go-backend:latest
-
-      - name: Build & push frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: ghcr.io/${{ env.OWNER }}/lets-go-frontend:latest
+          tags: ghcr.io/${{ env.OWNER }}/lets-go:latest
