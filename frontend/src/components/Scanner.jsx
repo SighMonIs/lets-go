@@ -11,30 +11,24 @@ export default function Scanner({ onScan, onClose }) {
     const html5Qrcode = new Html5Qrcode(divId)
     scannerRef.current = html5Qrcode
 
-    Html5Qrcode.getCameras()
-      .then(cameras => {
-        if (!cameras.length) throw new Error('No camera found')
-        const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1]
-        return html5Qrcode.start(
-          backCam.id,
-          {
-            fps: 15,
-            qrbox: { width: 280, height: 160 },
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E,
-            ],
-          },
-          (decodedText) => {
-            html5Qrcode.stop().catch(() => {})
-            onScan(decodedText)
-          },
-          () => {}
-        )
-      })
-      .catch(err => setError(err.message || 'Camera unavailable'))
+    html5Qrcode.start(
+      { facingMode: "environment" },
+      {
+        fps: 15,
+        qrbox: { width: 280, height: 160 },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+        ],
+      },
+      (decodedText) => {
+        html5Qrcode.stop().catch(() => {})
+        onScan(decodedText)
+      },
+      () => {}
+    ).catch(err => setError(err.message || 'Camera unavailable'))
 
     return () => {
       html5Qrcode.stop().catch(() => {})
