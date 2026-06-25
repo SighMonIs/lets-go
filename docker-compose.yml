@@ -8,6 +8,10 @@ services:
       POSTGRES_DB: letsgo
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U letsgo"]
+      interval: 5s
+      retries: 5
 
   backend:
     build: ./backend
@@ -16,7 +20,8 @@ services:
     environment:
       DATABASE_URL: postgresql://letsgo:letsgo@db:5432/letsgo
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
