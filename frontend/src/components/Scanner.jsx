@@ -1,55 +1,45 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 
 const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e']
 
 export default function Scanner({ onScan, onClose }) {
   const [error, setError] = useState(null)
   const [manualInput, setManualInput] = useState('')
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const rafRef = useRef(null)
+  const [preview, setPreview] = useState(null)
+  const [scanning, setScanning] = useState(false)
+  const inputRef = useRef(null)
 
-  useEffect(() => {
+  const handlePhoto = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setPreview(URL.createObjectURL(file))
+    setError(null)
+    setScanning(true)
+
     if (!('BarcodeDetector' in window)) {
-      setError('Barcode scanning not supported in this browser. Use manual entry below.')
+      setError('Barcode detection not supported in this browser. Use manual entry below.')
+      setScanning(false)
       return
     }
 
-    const detector = new window.BarcodeDetector({ formats: BARCODE_FORMATS })
-    let active = true
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(stream => {
-        streamRef.current = stream
-        const video = videoRef.current
-        if (!video) return
-        video.srcObject = stream
-        video.play()
-
-        const scan = async () => {
-          if (!active) return
-          if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            try {
-              const barcodes = await detector.detect(video)
-              if (barcodes.length > 0) {
-                active = false
-                onScan(barcodes[0].rawValue)
-                return
-              }
-            } catch {}
-          }
-          rafRef.current = requestAnimationFrame(scan)
-        }
-        rafRef.current = requestAnimationFrame(scan)
-      })
-      .catch(err => setError(err.message || 'Camera unavailable'))
-
-    return () => {
-      active = false
-      cancelAnimationFrame(rafRef.current)
-      streamRef.current?.getTracks().forEach(t => t.stop())
+    try {
+      const detector = new window.BarcodeDetector({ formats: BARCODE_FORMATS })
+      const img = new Image()
+      img.src = URL.createObjectURL(file)
+      await new Promise(r => { img.onload = r })
+      const barcodes = await detector.detect(img)
+      if (barcodes.length > 0) {
+        onScan(barcodes[0].rawValue)
+      } else {
+        setError('No barcode found in photo. Try again or use manual entry.')
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to scan photo.')
+    } finally {
+      setScanning(false)
     }
-  }, [onScan])
+  }
 
   const handleManual = (e) => {
     e.preventDefault()
@@ -64,16 +54,29 @@ export default function Scanner({ onScan, onClose }) {
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
-        {error ? (
-          <div style={styles.errorBox}>
-            <p>{error}</p>
-            <p style={{ fontSize: 13, marginTop: 6, color: '#666' }}>Use manual entry below.</p>
-          </div>
-        ) : (
-          <video ref={videoRef} style={styles.video} muted playsInline />
+        <button style={styles.photoBtn} onClick={() => inputRef.current?.click()} disabled={scanning}>
+          {scanning ? 'Scanning...' : '📷 Take Photo of Barcode'}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={handlePhoto}
+        />
+
+        {preview && (
+          <img src={preview} alt="Captured" style={styles.preview} />
         )}
 
-        <p style={styles.hint}>Point camera at the barcode on the LEGO box</p>
+        {error && (
+          <div style={styles.errorBox}>
+            <p>{error}</p>
+          </div>
+        )}
+
+        <p style={styles.hint}>Take a clear photo of the barcode on the box</p>
 
         <form onSubmit={handleManual} style={styles.manualForm}>
           <input
@@ -105,11 +108,18 @@ const styles = {
     background: 'none', border: 'none', fontSize: 20,
     color: '#666', padding: '4px 8px', borderRadius: 8,
   },
-  video: { width: '100%', borderRadius: 12, background: '#000', minHeight: 200 },
+  photoBtn: {
+    background: '#e3000b', color: '#fff', border: 'none',
+    borderRadius: 12, padding: '16px 24px', fontSize: 17, fontWeight: 700,
+    width: '100%', boxShadow: '0 4px 14px rgba(227,0,11,0.3)',
+  },
+  preview: {
+    width: '100%', borderRadius: 12, maxHeight: 200, objectFit: 'contain', background: '#f8f8f8',
+  },
   hint: { fontSize: 13, color: '#888', textAlign: 'center' },
   errorBox: {
     background: '#fff3f3', border: '1px solid #fcc', borderRadius: 8,
-    padding: 12, textAlign: 'center', color: '#c00',
+    padding: 12, textAlign: 'center', color: '#c00', fontSize: 14,
   },
   manualForm: { display: 'flex', gap: 8 },
   input: {
