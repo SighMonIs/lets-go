@@ -53,7 +53,7 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
     if not barcode:
         raise HTTPException(status_code=400, detail="barcode is required")
 
-    # Check if already in DB
+    # Check if already in DB by barcode
     existing = db.query(models.LegoSet).filter(models.LegoSet.barcode == barcode).first()
     if existing:
         existing.quantity = (existing.quantity or 1) + 1
@@ -75,8 +75,18 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
             detail=f"No LEGO set found for barcode '{barcode}'. Try entering the set number manually.",
         )
 
+    set_num = rb_data.get("set_num", barcode)
+
+    # If same set_num already exists (different barcode), just bump quantity
+    existing_by_num = db.query(models.LegoSet).filter(models.LegoSet.set_num == set_num).first()
+    if existing_by_num:
+        existing_by_num.quantity = (existing_by_num.quantity or 1) + 1
+        db.commit()
+        db.refresh(existing_by_num)
+        return existing_by_num
+
     lego_set = models.LegoSet(
-        set_num=rb_data.get("set_num", barcode),
+        set_num=set_num,
         name=rb_data.get("name", "Unknown"),
         year=rb_data.get("year"),
         num_parts=rb_data.get("num_parts"),
