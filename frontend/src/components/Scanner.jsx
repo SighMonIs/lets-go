@@ -1,37 +1,53 @@
 import { useEffect, useRef, useState } from 'react'
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
+
+const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e']
 
 export default function Scanner({ onScan, onClose }) {
   const [error, setError] = useState(null)
   const [manualInput, setManualInput] = useState('')
-  const scannerRef = useRef(null)
-  const divId = 'qr-scanner-div'
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const rafRef = useRef(null)
 
   useEffect(() => {
-    const html5Qrcode = new Html5Qrcode(divId)
-    scannerRef.current = html5Qrcode
+    if (!('BarcodeDetector' in window)) {
+      setError('Barcode scanning not supported in this browser. Use manual entry below.')
+      return
+    }
 
-    html5Qrcode.start(
-      { facingMode: "environment" },
-      {
-        fps: 15,
-        qrbox: { width: 280, height: 160 },
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-        ],
-      },
-      (decodedText) => {
-        html5Qrcode.stop().catch(() => {})
-        onScan(decodedText)
-      },
-      () => {}
-    ).catch(err => setError(err.message || 'Camera unavailable'))
+    const detector = new window.BarcodeDetector({ formats: BARCODE_FORMATS })
+    let active = true
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(stream => {
+        streamRef.current = stream
+        const video = videoRef.current
+        if (!video) return
+        video.srcObject = stream
+        video.play()
+
+        const scan = async () => {
+          if (!active) return
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            try {
+              const barcodes = await detector.detect(video)
+              if (barcodes.length > 0) {
+                active = false
+                onScan(barcodes[0].rawValue)
+                return
+              }
+            } catch {}
+          }
+          rafRef.current = requestAnimationFrame(scan)
+        }
+        rafRef.current = requestAnimationFrame(scan)
+      })
+      .catch(err => setError(err.message || 'Camera unavailable'))
 
     return () => {
-      html5Qrcode.stop().catch(() => {})
+      active = false
+      cancelAnimationFrame(rafRef.current)
+      streamRef.current?.getTracks().forEach(t => t.stop())
     }
   }, [onScan])
 
@@ -54,7 +70,7 @@ export default function Scanner({ onScan, onClose }) {
             <p style={{ fontSize: 13, marginTop: 6, color: '#666' }}>Use manual entry below.</p>
           </div>
         ) : (
-          <div id={divId} style={styles.scannerDiv} />
+          <video ref={videoRef} style={styles.video} muted playsInline />
         )}
 
         <p style={styles.hint}>Point camera at the barcode on the LEGO box</p>
@@ -89,7 +105,7 @@ const styles = {
     background: 'none', border: 'none', fontSize: 20,
     color: '#666', padding: '4px 8px', borderRadius: 8,
   },
-  scannerDiv: { width: '100%', borderRadius: 12, overflow: 'hidden', background: '#000', minHeight: 200 },
+  video: { width: '100%', borderRadius: 12, background: '#000', minHeight: 200 },
   hint: { fontSize: 13, color: '#888', textAlign: 'center' },
   errorBox: {
     background: '#fff3f3', border: '1px solid #fcc', borderRadius: 8,
