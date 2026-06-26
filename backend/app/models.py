@@ -5,6 +5,14 @@ from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 from app.database import Base
 
 
+class BarcodeCache(Base):
+    __tablename__ = "barcode_cache"
+
+    ean = Column(String, primary_key=True, index=True)
+    set_num = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class LegoSet(Base):
     __tablename__ = "lego_sets"
 

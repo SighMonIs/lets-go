@@ -67,16 +67,26 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
 
     log.info("Scan request: barcode=%s", barcode)
 
-    # Step 1: BrickOwl scrape converts EAN-13 → set number
-    brickowl = await lookup_by_barcode(barcode)
-    log.info("BrickOwl result: %s", brickowl)
-
-    # Step 2: look up the extracted set number on Rebrickable for full details
-    if brickowl and brickowl.get("_needs_rebrickable"):
-        rb_data = await lookup_set_by_number(brickowl["set_num"])
-        log.info("Rebrickable lookup for %s: %s", brickowl["set_num"], rb_data)
+    # Step 1: check local barcode cache first
+    cached = db.query(models.BarcodeCache).filter(models.BarcodeCache.ean == barcode).first()
+    if cached:
+        log.info("Barcode cache hit: %s -> %s", barcode, cached.set_num)
+        rb_data = await lookup_set_by_number(cached.set_num)
     else:
         rb_data = None
+
+    # Step 2: BrickOwl scrape converts EAN-13 → set number
+    if not rb_data:
+        brickowl = await lookup_by_barcode(barcode)
+        log.info("BrickOwl result: %s", brickowl)
+        if brickowl and brickowl.get("_needs_rebrickable"):
+            rb_data = await lookup_set_by_number(brickowl["set_num"])
+            log.info("Rebrickable lookup for %s: %s", brickowl["set_num"], rb_data)
+            # Save to local cache so we don't need BrickOwl again
+            if rb_data:
+                db.merge(models.BarcodeCache(ean=barcode, set_num=rb_data.get("set_num", brickowl["set_num"])))
+                db.commit()
+                log.info("Cached EAN %s -> %s", barcode, rb_data.get("set_num"))
 
     # Fall back: treat barcode as a set number directly (manual entry path)
     if not rb_data:
