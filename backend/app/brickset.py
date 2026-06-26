@@ -15,7 +15,7 @@ async def lookup_by_barcode(barcode: str) -> dict | None:
     params = {
         "apiKey": settings.brickset_api_key,
         "userHash": "",
-        "params": json.dumps({"barcode": barcode}),
+        "params": json.dumps({"EAN": barcode}),
     }
 
     async with httpx.AsyncClient() as client:
