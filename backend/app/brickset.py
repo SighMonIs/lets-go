@@ -1,56 +1,37 @@
-import json
 import logging
+import re
 
 import httpx
 
-from app.config import settings
-
-BASE_URL = "https://brickset.com/api/v3.asmx"
 log = logging.getLogger(__name__)
 
 
 async def lookup_by_barcode(barcode: str) -> dict | None:
-    """Look up a LEGO set by EAN/UPC barcode via Brickset query search."""
-    if not settings.brickset_api_key:
-        log.warning("BRICKSET_API_KEY not set — skipping barcode lookup")
-        return None
+    """
+    Look up a LEGO set number from an EAN/UPC barcode by scraping BrickOwl's
+    catalog search. Extracts the set number from the result URL, then returns
+    it so the scan route can fetch full details from Rebrickable.
+    """
+    url = f"https://www.brickowl.com/search/catalog?query={barcode}"
+    log.info("BrickOwl search: %s", url)
 
-    params = {
-        "apiKey": settings.brickset_api_key,
-        "userHash": "",
-        "params": json.dumps({"query": barcode}),
-    }
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        resp = await client.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
 
-    log.info("Brickset query lookup: barcode=%s", barcode)
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{BASE_URL}/getSets", params=params, timeout=10)
-
-    log.info("Brickset response: status=%s body=%s", resp.status_code, resp.text[:500])
+    log.info("BrickOwl response: status=%s", resp.status_code)
 
     if resp.status_code != 200:
+        log.error("BrickOwl HTTP error: %s", resp.status_code)
         return None
 
-    data = resp.json()
+    # Find catalog URLs like /catalog/lego-some-name-set-75580
+    matches = re.findall(r'/catalog/[a-z0-9-]+-set-(\d{4,6})(?:["\s])', resp.text)
+    log.info("BrickOwl set numbers found: %s", matches)
 
-    if data.get("status") == "error":
-        log.error("Brickset API error: %s", data.get("message"))
+    if not matches:
         return None
 
-    sets = data.get("sets", [])
-    if not sets:
-        log.info("Brickset: no sets found for query=%s", barcode)
-        return None
+    set_num = matches[0]
+    log.info("BrickOwl extracted set number: %s", set_num)
 
-    s = sets[0]
-    image = s.get("image", {})
-    result = {
-        "set_num": f"{s['number']}-{s.get('numberVariant', 1)}",
-        "name": s.get("name", "Unknown"),
-        "year": s.get("year"),
-        "num_parts": s.get("pieces"),
-        "set_img_url": image.get("imageURL") or image.get("thumbnailURL"),
-        "set_url": s.get("bricksetURL"),
-    }
-    log.info("Brickset found: %s", result)
-    return result
+    return {"set_num": set_num, "_needs_rebrickable": True}

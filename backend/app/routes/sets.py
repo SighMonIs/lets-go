@@ -67,9 +67,16 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
 
     log.info("Scan request: barcode=%s", barcode)
 
-    # Try Brickset query search (EAN-13 → set data)
-    rb_data = await lookup_by_barcode(barcode)
-    log.info("Brickset result: %s", rb_data)
+    # Step 1: BrickOwl scrape converts EAN-13 → set number
+    brickowl = await lookup_by_barcode(barcode)
+    log.info("BrickOwl result: %s", brickowl)
+
+    # Step 2: look up the extracted set number on Rebrickable for full details
+    if brickowl and brickowl.get("_needs_rebrickable"):
+        rb_data = await lookup_set_by_number(brickowl["set_num"])
+        log.info("Rebrickable lookup for %s: %s", brickowl["set_num"], rb_data)
+    else:
+        rb_data = None
 
     # Fall back: treat barcode as a set number directly (manual entry path)
     if not rb_data:
