@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,7 @@ from app.database import get_db
 from app.brickset import lookup_by_barcode
 from app.rebrickable import lookup_set_by_number, search_sets_by_query
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/sets", tags=["sets"])
 
 
@@ -63,15 +66,19 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
         return existing
 
     # Try Brickset barcode lookup first (EAN-13 → set number)
+    log.info("Scan request: barcode=%s", barcode)
     rb_data = await lookup_by_barcode(barcode)
+    log.info("Brickset result: %s", rb_data)
 
     # Fall back to Rebrickable direct lookup (works when user types a set number)
     if not rb_data:
         rb_data = await lookup_set_by_number(barcode)
+        log.info("Rebrickable direct result: %s", rb_data)
 
     if not rb_data:
         results = await search_sets_by_query(barcode)
         rb_data = results[0] if results else None
+        log.info("Rebrickable search result: %s", rb_data)
 
     if not rb_data:
         raise HTTPException(
