@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.brickset import lookup_by_barcode
 from app.rebrickable import lookup_set_by_number, search_sets_by_query
 
 router = APIRouter(prefix="/sets", tags=["sets"])
@@ -61,11 +62,14 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
         db.refresh(existing)
         return existing
 
-    # Try Rebrickable lookup
-    rb_data = await lookup_set_by_number(barcode)
+    # Try Brickset barcode lookup first (EAN-13 → set number)
+    rb_data = await lookup_by_barcode(barcode)
+
+    # Fall back to Rebrickable direct lookup (works when user types a set number)
+    if not rb_data:
+        rb_data = await lookup_set_by_number(barcode)
 
     if not rb_data:
-        # Fall back to search
         results = await search_sets_by_query(barcode)
         rb_data = results[0] if results else None
 
