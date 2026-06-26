@@ -67,18 +67,11 @@ async def scan_barcode(payload: dict, db: Session = Depends(get_db)):
 
     log.info("Scan request: barcode=%s", barcode)
 
-    # Step 1: UPC Item DB converts EAN-13 → set number
-    upc_result = await lookup_by_barcode(barcode)
-    log.info("UPC lookup result: %s", upc_result)
+    # Try Brickset query search (EAN-13 → set data)
+    rb_data = await lookup_by_barcode(barcode)
+    log.info("Brickset result: %s", rb_data)
 
-    # Step 2: if we got a set number from UPC DB, look it up on Rebrickable
-    if upc_result and upc_result.get("_needs_rebrickable"):
-        rb_data = await lookup_set_by_number(upc_result["set_num"])
-        log.info("Rebrickable lookup for set %s: %s", upc_result["set_num"], rb_data)
-    else:
-        rb_data = upc_result
-
-    # Fall back: treat barcode as a set number directly (manual entry)
+    # Fall back: treat barcode as a set number directly (manual entry path)
     if not rb_data:
         rb_data = await lookup_set_by_number(barcode)
         log.info("Rebrickable direct result: %s", rb_data)
